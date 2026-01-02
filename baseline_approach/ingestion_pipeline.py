@@ -1,0 +1,54 @@
+import os
+from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from dotenv import load_dotenv
+
+load_dotenv()
+
+def load_papers(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Directory {path} not found")
+    
+    try:
+        loader = DirectoryLoader(path, glob="*.pdf", loader_cls=PyPDFLoader)
+        documents = loader.load()
+        print(f"Loaded {len(documents)} pages from PDF files")
+        return documents
+    except Exception as e:
+        print(f"Error loading papers: {e}")
+        return []
+
+def split_documents(docs):
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1500, 
+        chunk_overlap=300, 
+        add_start_index=True,  
+    )
+    all_splits = text_splitter.split_documents(docs)
+    print(f"Split documents into {len(all_splits)} chunks.")
+    return all_splits
+
+def create_vector_store(splits):
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    vectorstore = Chroma.from_documents(
+        documents=splits,
+        embedding=embeddings,
+        persist_directory="./chroma_db"
+    )
+    print(f"Created vector store with {len(splits)} documents")
+    return vectorstore
+
+def main():
+    print("Starting paper ingestion...")
+    docs = load_papers("research_papers/")
+    print(f"Successfully loaded {len(docs)} document pages")
+    
+    splits = split_documents(docs)
+    print(f"Created {len(splits)} text chunks")
+    
+    vectorstore = create_vector_store(splits)
+    print("Vector store created successfully!")
+
+main()
