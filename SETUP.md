@@ -16,7 +16,7 @@
 
 3. **Install dependencies**:
    ```bash
-   pip install -r requirements-clean.txt
+   pip install -r requirements.txt
    ```
 
 4. **Setup environment**:
