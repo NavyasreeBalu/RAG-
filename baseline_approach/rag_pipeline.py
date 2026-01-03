@@ -7,6 +7,9 @@ import os
 load_dotenv()
 
 def load_vector_store():
+    if not os.path.exists("./chroma_db"):
+        raise FileNotFoundError("Vector store not found. Run ingestion_pipeline.py first.")
+    
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vectorstore = Chroma(
         persist_directory="./chroma_db",
@@ -19,7 +22,7 @@ def retrieve_documents(vectorstore, query, k=3):
     return results
 
 def generate_answer(query, context_docs):
-    context = "\n\n".join([doc.page_content[:1000] for doc in context_docs])
+    context = "\n\n".join([doc.page_content for doc in context_docs])
     
     prompt = f"""Based on the research papers below, answer the question clearly.
 
@@ -31,7 +34,7 @@ Question: {query}
 Answer:"""
     
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro",
+        model=os.getenv("GOOGLE_MODEL", "gemini-2.5-pro"),
         temperature=0.3,
         google_api_key=os.getenv("GOOGLE_API_KEY")
     )
