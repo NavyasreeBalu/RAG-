@@ -41,7 +41,6 @@ Answer:"""
     
     try:
         response = llm.invoke(prompt)
-        # Clean up the response by removing end tokens
         content = response.content if hasattr(response, 'content') else str(response)
         return content.replace('<|endoftext|>', '').strip()
     except Exception as e:

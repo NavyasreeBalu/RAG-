@@ -7,6 +7,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def validate_document(doc):
+    return len(doc.page_content.strip()) > 50 and not doc.page_content.isspace()
+
+def extract_section_header(text):
+    lines = text.split('\n')[:3]
+    for line in lines:
+        if line.strip() and (line.isupper() or any(word in line.lower() for word in ['abstract', 'introduction', 'conclusion', 'method'])):
+            return line.strip()[:50]
+    return "content"
+
 def load_papers(path):
     if not os.path.exists(path):
         raise FileNotFoundError(f"Directory {path} not found")
@@ -14,8 +24,10 @@ def load_papers(path):
     try:
         loader = DirectoryLoader(path, glob="*.pdf", loader_cls=PyPDFLoader)
         documents = loader.load()
-        print(f"Loaded {len(documents)} pages from PDF files")
-        return documents
+        
+        valid_docs = [doc for doc in documents if validate_document(doc)]
+        print(f"Loaded {len(valid_docs)} valid pages from {len(documents)} total pages")
+        return valid_docs
     except Exception as e:
         print(f"Error loading papers: {e}")
         return []
@@ -27,6 +39,15 @@ def split_documents(docs):
         add_start_index=True,  
     )
     all_splits = text_splitter.split_documents(docs)
+    
+    for i, chunk in enumerate(all_splits):
+        source = chunk.metadata.get('source', 'unknown').split('/')[-1]
+        chunk.metadata.update({
+            'chunk_id': f"{source}_{i}",
+            'total_chunks': len(all_splits),
+            'section': extract_section_header(chunk.page_content)
+        })
+    
     print(f"Split documents into {len(all_splits)} chunks.")
     return all_splits
 
