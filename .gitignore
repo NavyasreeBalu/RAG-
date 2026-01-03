@@ -51,3 +51,11 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+# Chroma database
+chroma_db/
+
+# Evaluation results
+evaluation_results.txt
+
+# Requirements backup
+requirements-clean.txt
