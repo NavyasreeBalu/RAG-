@@ -23,11 +23,23 @@ def dense_retriever(vectorstore, query, k=3):
     return vectorstore.similarity_search(query, k=k)
 
 def sparse_retrieval(vectorstore, query, k=3):
-    all_docs = vectorstore.get()
-    texts = all_docs['documents']
+    # Get proper Document objects with metadata
+    all_docs = vectorstore.similarity_search("", k=1000)
+    texts = [doc.page_content for doc in all_docs]
+    
     bm25_retriever = BM25Retriever.from_texts(texts)
     bm25_retriever.k = k
-    return bm25_retriever.invoke(query)
+    bm25_results = bm25_retriever.invoke(query)
+    
+    # Map BM25 results back to original Documents with metadata
+    result_docs = []
+    for bm25_doc in bm25_results:
+        for orig_doc in all_docs:
+            if orig_doc.page_content == bm25_doc.page_content:
+                result_docs.append(orig_doc)
+                break
+    
+    return result_docs[:k]
 
 def rerank_documents(query, documents, top_k=3):
     model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
