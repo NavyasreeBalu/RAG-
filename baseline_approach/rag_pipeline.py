@@ -34,14 +34,16 @@ Question: {query}
 Answer:"""
     
     llm = ChatGoogleGenerativeAI(
-        model=os.getenv("GOOGLE_MODEL", "gemini-2.5-pro"),
+        model=os.getenv("GOOGLE_MODEL", "gemini-1.5-flash"),
         temperature=0.3,
         google_api_key=os.getenv("GOOGLE_API_KEY")
     )
     
     try:
         response = llm.invoke(prompt)
-        return response.content
+        # Clean up the response by removing end tokens
+        content = response.content if hasattr(response, 'content') else str(response)
+        return content.replace('<|endoftext|>', '').strip()
     except Exception as e:
         return f"Generation error: {str(e)}"
 

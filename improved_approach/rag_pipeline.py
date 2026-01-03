@@ -9,6 +9,9 @@ import os
 load_dotenv()
 
 def load_vector_store():
+    if not os.path.exists("./chroma_db"):
+        raise FileNotFoundError("Vector store not found. Run ingestion_pipeline.py first.")
+    
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vectorstore = Chroma(
         persist_directory="./chroma_db",
@@ -52,19 +55,19 @@ def hybrid_retrieval(vectorstore, query, k=3):
     return rerank_documents(query, combined[:k*2], k)
 
 def generate_answer(query, context_docs):
-    context = "\n\n".join([doc.page_content[:1000] for doc in context_docs])
+    context = "\n\n".join([doc.page_content for doc in context_docs])
     
-    prompt = f"""Based on the research papers below, answer the question clearly.
+    prompt = f"""You are a helpful AI assistant. Based on the research papers provided, answer the question clearly and concisely.
 
-Context:
+Context from research papers:
 {context}
 
 Question: {query}
 
-Answer:"""
+Please provide a clear answer based on the context above:"""
     
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=os.getenv("GOOGLE_MODEL", "gemini-1.5-flash"),
         temperature=0.3,
         google_api_key=os.getenv("GOOGLE_API_KEY")
     )
