@@ -1,6 +1,6 @@
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 import os
 
@@ -22,8 +22,26 @@ def retrieve_documents(vectorstore, query, k=3):
     return results
 
 def generate_answer(query, context_docs):
-    # Skip LLM generation due to quota limits  
-    return f"Answer generation skipped (quota limit). Retrieved {len(context_docs)} relevant documents."
+    llm = ChatGroq(
+        groq_api_key=os.getenv("GROQ_API_KEY"),
+        model_name=os.getenv("MODEL_NAME")
+    )
+    
+    context = "\n\n".join([doc.page_content for doc in context_docs])
+    prompt = f"""Based on the following context, answer the question:
+
+Context:
+{context}
+
+Question: {query}
+
+Answer:"""
+    
+    try:
+        response = llm.invoke(prompt)
+        return response.content
+    except Exception as e:
+        return f"Answer generation failed: {str(e)}"
 
 def main():
     print("Starting RAG pipeline...")

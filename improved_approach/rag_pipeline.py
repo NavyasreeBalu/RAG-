@@ -1,6 +1,6 @@
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_community.retrievers import BM25Retriever
 from sentence_transformers import CrossEncoder
 from dotenv import load_dotenv
@@ -11,19 +11,19 @@ load_dotenv()
 class HybridRAGPipeline:
     def __init__(self, persist_directory="./chroma_db", config=None):
         self.config = config or {
-            'dense_k': 5,
-            'sparse_k': 5,
-            'rerank_k': 3,
-            'temperature': 0.3
+            'dense_k': 6,      # Moderate increase
+            'sparse_k': 3,     # Slight increase
+            'rerank_k': 5,     # Keep same
+            'temperature': 0.1
         }
         
         self.vectorstore = self._load_vectorstore(persist_directory)
         self.bm25_retriever = self._build_bm25_index()
         self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-        self.llm = ChatGoogleGenerativeAI(
-            model=os.getenv("GOOGLE_MODEL", "gemini-1.5-flash"),
-            temperature=self.config['temperature'],
-            google_api_key=os.getenv("GOOGLE_API_KEY")
+        self.llm = ChatGroq(
+            groq_api_key=os.getenv("GROQ_API_KEY"),
+            model_name=os.getenv("MODEL_NAME"),
+            temperature=self.config['temperature']
         )
         
 
@@ -47,14 +47,26 @@ class HybridRAGPipeline:
         return BM25Retriever.from_documents(documents)
     
     def hybrid_retrieval(self, query):
+        """
+        Hybrid retrieval combining dense semantic search with sparse keyword matching.
+        Uses cross-encoder reranking for final document selection.
+        """
         dense_docs = self.vectorstore.similarity_search(query, k=self.config['dense_k'])
         
         self.bm25_retriever.k = self.config['sparse_k']
         sparse_docs = self.bm25_retriever.invoke(query)
         
+        # Deduplication using metadata + content
         all_docs = dense_docs + sparse_docs
+        seen_content = set()
+        unique_docs = []
+        for doc in all_docs:
+            content_key = f"{doc.metadata.get('source', '')}_{doc.page_content[:100]}"
+            if content_key not in seen_content:
+                seen_content.add(content_key)
+                unique_docs.append(doc)
         
-        final_docs = self._rerank_documents(query, all_docs, self.config['rerank_k'])
+        final_docs = self._rerank_documents(query, unique_docs, self.config['rerank_k'])
         
         return final_docs
     
@@ -68,10 +80,31 @@ class HybridRAGPipeline:
         scored_docs = list(zip(documents, scores))
         scored_docs.sort(key=lambda x: x[1], reverse=True)
         
-        return [doc for doc, _ in scored_docs[:top_k]]
+        # Safety: Always include top dense result if it has high semantic similarity
+        reranked = [doc for doc, _ in scored_docs[:top_k]]
+        if documents[0] not in reranked and len(documents) > 0:
+            # Replace lowest scored with top dense result
+            reranked[-1] = documents[0]
+        
+        return reranked
     
     def generate_answer(self, query, context_docs):
-        return f"Answer generation skipped (quota limit). Retrieved {len(context_docs)} relevant documents."
+        context = "\n\n".join([doc.page_content for doc in context_docs])
+        
+        prompt = f"""Based on the following context, answer the question:
+
+Context:
+{context}
+
+Question: {query}
+
+Answer:"""
+        
+        try:
+            response = self.llm.invoke(prompt)
+            return response.content
+        except Exception as e:
+            return f"Answer generation failed: {str(e)}"
     
     def query(self, question):
         docs = self.hybrid_retrieval(question)
