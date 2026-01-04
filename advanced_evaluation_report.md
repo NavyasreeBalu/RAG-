@@ -4,9 +4,9 @@
 
 | Metric | Baseline | Improved | Improvement |
 |--------|----------|----------|-------------|
-| Precision@5 | 0.111 | 0.222 | +100.0% |
-| NDCG@10 | 0.986 | 0.913 | -7.4% |
-| Context Relevance | 1.333 | 1.667 | +25.0% |
+| Precision@5 | 0.156 | 0.222 | +42.9% |
+| NDCG@10 | 0.958 | 0.895 | -6.6% |
+| Context Relevance | 1.467 | 1.667 | +13.6% |
 
 ## Sample Document Comparison (Before vs After)
 
@@ -48,10 +48,10 @@ i
 pθ(yi|x,z,y...
 
 2. **Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks (2020).pdf**
-   points and 2.6 Rouge-L points. RAG approaches state-of-the-art model performance, which is
-impressiv...
+   in 71% of cases, and a gold article is present in the top 10 retrieved articles in 90% of cases.
+4.5...
 
 3. **Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks (2020).pdf**
-   tasks, RAG sets a new state of the art (only on the T5-comparable split for TQA). RAG combines
-the g...
+   points and 2.6 Rouge-L points. RAG approaches state-of-the-art model performance, which is
+impressiv...
 

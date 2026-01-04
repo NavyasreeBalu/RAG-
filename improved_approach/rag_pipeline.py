@@ -11,8 +11,8 @@ load_dotenv()
 class HybridRAGPipeline:
     def __init__(self, persist_directory="./chroma_db", config=None):
         self.config = config or {
-            'dense_k': 6,      # Moderate increase
-            'sparse_k': 3,     # Slight increase
+            'dense_k': 8,      # Better recall for difficult queries
+            'sparse_k': 4,     # More BM25 candidates
             'rerank_k': 5,     # Keep same
             'temperature': 0.1
         }
