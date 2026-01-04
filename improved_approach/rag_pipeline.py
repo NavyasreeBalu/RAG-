@@ -17,7 +17,6 @@ class HybridRAGPipeline:
             'temperature': 0.3
         }
         
-        # Load heavy resources once
         self.vectorstore = self._load_vectorstore(persist_directory)
         self.bm25_retriever = self._build_bm25_index()
         self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
@@ -37,42 +36,27 @@ class HybridRAGPipeline:
         return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
     
     def _build_bm25_index(self):
-        # More efficient: get all documents directly
         collection = self.vectorstore._collection
         all_data = collection.get()
         
-        # Convert to Document objects with metadata
-        from langchain.schema import Document
+        from langchain_core.documents import Document
         documents = []
         for i, (doc_id, content, metadata) in enumerate(zip(all_data['ids'], all_data['documents'], all_data['metadatas'])):
             documents.append(Document(page_content=content, metadata=metadata or {}))
         
         return BM25Retriever.from_documents(documents)
     
-    def _rrf_fusion(self, dense_docs, sparse_docs, k=60):
-        # Reciprocal Rank Fusion
-        doc_scores = {}
+    def hybrid_retrieval(self, query):
+        dense_docs = self.vectorstore.similarity_search(query, k=self.config['dense_k'])
+        
+        self.bm25_retriever.k = self.config['sparse_k']
+        sparse_docs = self.bm25_retriever.invoke(query)
+        
         all_docs = dense_docs + sparse_docs
         
-        # Score dense results
-        for rank, doc in enumerate(dense_docs):
-            doc_scores[doc] = doc_scores.get(doc, 0) + 1 / (k + rank + 1)
+        final_docs = self._rerank_documents(query, all_docs, self.config['rerank_k'])
         
-        # Score sparse results  
-        for rank, doc in enumerate(sparse_docs):
-            doc_scores[doc] = doc_scores.get(doc, 0) + 1 / (k + rank + 1)
-        
-        # Sort by RRF score
-        sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)
-        
-        return [doc for doc, _ in sorted_docs[:self.config['rerank_k']*2]]
-    
-    def _dense_retrieval(self, query, k):
-        return self.vectorstore.similarity_search(query, k=k)
-    
-    def _sparse_retrieval(self, query, k):
-        self.bm25_retriever.k = k
-        return self.bm25_retriever.invoke(query)
+        return final_docs
     
     def _rerank_documents(self, query, documents, top_k):
         if len(documents) <= top_k:
@@ -86,39 +70,10 @@ class HybridRAGPipeline:
         
         return [doc for doc, _ in scored_docs[:top_k]]
     
-    def hybrid_retrieval(self, query):
-        # Retrieve from both methods
-        dense_docs = self._dense_retrieval(query, self.config['dense_k'])
-        sparse_docs = self._sparse_retrieval(query, self.config['sparse_k'])
-        
-        # RRF fusion
-        fused_docs = self._rrf_fusion(dense_docs, sparse_docs)
-        
-        # Rerank
-        final_docs = self._rerank_documents(query, fused_docs, self.config['rerank_k'])
-        
-        return final_docs
-    
     def generate_answer(self, query, context_docs):
-        context = "\n\n".join([doc.page_content for doc in context_docs])
-        
-        prompt = f"""Based on the research papers provided, answer the question clearly and concisely.
-
-Context from research papers:
-{context}
-
-Question: {query}
-
-Please provide a clear answer based on the context above:"""
-        
-        try:
-            response = self.llm.invoke(prompt)
-            return response.content
-        except Exception as e:
-            return f"Generation error: {str(e)}"
+        return f"Answer generation skipped (quota limit). Retrieved {len(context_docs)} relevant documents."
     
     def query(self, question):
-        # Retrieve documents
         docs = self.hybrid_retrieval(question)
         
         # Generate answer
@@ -132,36 +87,21 @@ Please provide a clear answer based on the context above:"""
             'num_sources': len(docs)
         }
     
-    def evaluate_retrieval(self, test_queries):
-        results = {}
-        for query in test_queries:
-            start_time = time.time()
-            docs = self.hybrid_retrieval(query)
-            
-            results[query] = {
-                'docs': docs,
-                'latency': time.time() - start_time,
-                'num_docs': len(docs),
-                'sources': [doc.metadata.get('source', 'Unknown') for doc in docs]
-            }
-        return results
-    
+
 
 
 def main():
     print("Starting Hybrid RAG pipeline...")
     
-    # Initialize pipeline
     rag = HybridRAGPipeline()
     print("Pipeline initialized successfully")
     
-    # Test query
     query = "What are transformer architectures?"
     print(f"\nQuery: {query}")
     
     result = rag.query(query)
     
-    print(f"\nRetrieved {result['num_sources']} documents in {result['retrieval_time']:.3f}s")
+    print(f"\nRetrieved {result['num_sources']} documents")
     
     for i, doc in enumerate(result['sources'], 1):
         source = doc.metadata.get('source', 'Unknown').split('/')[-1]

@@ -22,29 +22,8 @@ def retrieve_documents(vectorstore, query, k=3):
     return results
 
 def generate_answer(query, context_docs):
-    context = "\n\n".join([doc.page_content for doc in context_docs])
-    
-    prompt = f"""Based on the research papers below, answer the question clearly.
-
-Context:
-{context}
-
-Question: {query}
-
-Answer:"""
-    
-    llm = ChatGoogleGenerativeAI(
-        model=os.getenv("GOOGLE_MODEL", "gemini-1.5-flash"),
-        temperature=0.3,
-        google_api_key=os.getenv("GOOGLE_API_KEY")
-    )
-    
-    try:
-        response = llm.invoke(prompt)
-        content = response.content if hasattr(response, 'content') else str(response)
-        return content.replace('<|endoftext|>', '').strip()
-    except Exception as e:
-        return f"Generation error: {str(e)}"
+    # Skip LLM generation due to quota limits  
+    return f"Answer generation skipped (quota limit). Retrieved {len(context_docs)} relevant documents."
 
 def main():
     print("Starting RAG pipeline...")

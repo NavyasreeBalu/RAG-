@@ -23,7 +23,10 @@ class RAGEvaluator:
     
     def evaluate_baseline(self, query):
         start_time = time.time()
-        docs = retrieve_documents(self.baseline_vectorstore, query, k=3)
+        # Get documents with relevance scores
+        docs_with_scores = self.baseline_vectorstore.similarity_search_with_score(query, k=3)
+        docs = [doc for doc, score in docs_with_scores]
+        scores = [score for doc, score in docs_with_scores]
         retrieval_time = time.time() - start_time
         
         answer = generate_answer(query, docs)
@@ -34,11 +37,38 @@ class RAGEvaluator:
             'answer': answer,
             'retrieval_time': retrieval_time,
             'total_time': total_time,
-            'num_sources': len(docs)
+            'num_sources': len(docs),
+            'relevance_scores': scores,
+            'avg_relevance': sum(scores) / len(scores) if scores else 0
         }
     
     def evaluate_improved(self, query):
-        return self.improved_rag.query(query)
+        start_time = time.time()
+        result = self.improved_rag.query(query)
+        total_time = time.time() - start_time
+        
+        # Get relevance scores for improved approach
+        docs_with_scores = self.improved_rag.vectorstore.similarity_search_with_score(query, k=len(result['sources']))
+        score_map = {doc.page_content: score for doc, score in docs_with_scores}
+        
+        # Map scores to retrieved documents
+        relevance_scores = []
+        for doc in result['sources']:
+            # Find closest match in score_map
+            best_score = min(score_map.values()) if score_map else 1.0
+            for content, score in score_map.items():
+                if doc.page_content[:100] in content or content[:100] in doc.page_content:
+                    best_score = score
+                    break
+            relevance_scores.append(best_score)
+        
+        # Add timing and relevance info
+        result['total_time'] = total_time
+        result['retrieval_time'] = total_time
+        result['relevance_scores'] = relevance_scores
+        result['avg_relevance'] = sum(relevance_scores) / len(relevance_scores) if relevance_scores else 0
+        
+        return result
     
     def compare_approaches(self):
         results = {}
@@ -54,16 +84,33 @@ class RAGEvaluator:
             # Evaluate improved
             improved_result = self.evaluate_improved(query)
             
-            # Calculate improvements
+            # Calculate speed difference
+            speed_difference = improved_result['total_time'] - baseline_result['total_time']
             speed_improvement = ((baseline_result['total_time'] - improved_result['total_time']) / baseline_result['total_time']) * 100
+            
+            # Use LangChain relevance scores
+            baseline_relevance = baseline_result['avg_relevance']
+            improved_relevance = improved_result['avg_relevance']
+            
+            # Lower scores are better in similarity search (distance), so flip the improvement calculation
+            relevance_improvement = ((baseline_relevance - improved_relevance) / baseline_relevance * 100) if baseline_relevance > 0 else 0
+            
+            baseline_sources = [doc.metadata.get('source', '').split('/')[-1] for doc in baseline_result['docs']]
+            improved_sources = [doc.metadata.get('source', '').split('/')[-1] for doc in improved_result['sources']]
             
             results[query] = {
                 'baseline': baseline_result,
                 'improved': improved_result,
-                'speed_improvement': speed_improvement
+                'baseline_sources': baseline_sources,
+                'improved_sources': improved_sources,
+                'speed_difference': speed_difference,
+                'speed_improvement': speed_improvement,
+                'baseline_relevance': baseline_relevance,
+                'improved_relevance': improved_relevance,
+                'relevance_improvement': relevance_improvement
             }
             
-            print(f"   Baseline: {baseline_result['total_time']:.2f}s | Improved: {improved_result['total_time']:.2f}s | Improvement: {speed_improvement:.1f}%")
+            print(f"   Baseline: {baseline_result['total_time']:.2f}s (rel: {baseline_relevance:.3f}) | Improved: {improved_result['total_time']:.2f}s (rel: {improved_relevance:.3f}) | Relevance improvement: {relevance_improvement:.1f}%")
         
         return results
     
