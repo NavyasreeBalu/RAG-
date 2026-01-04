@@ -17,10 +17,6 @@ def load_vector_store():
     )
     return vectorstore
 
-def retrieve_documents(vectorstore, query, k=3):
-    results = vectorstore.similarity_search(query, k=k)
-    return results
-
 def generate_answer(query, context_docs):
     llm = ChatGroq(
         groq_api_key=os.getenv("GROQ_API_KEY"),
@@ -52,7 +48,7 @@ def main():
     query = "What are transformer architectures?"
     print(f"Query: {query}")
     
-    results = retrieve_documents(vectorstore, query, k=3)
+    results = vectorstore.similarity_search(query, k=3)
     print(f"Retrieved {len(results)} documents")
     
     for i, doc in enumerate(results, 1):

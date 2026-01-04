@@ -4,9 +4,9 @@
 
 | Metric | Baseline | Improved | Improvement |
 |--------|----------|----------|-------------|
-| Precision@5 | 0.156 | 0.222 | +42.9% |
-| NDCG@10 | 0.958 | 0.895 | -6.6% |
-| Context Relevance | 1.467 | 1.667 | +13.6% |
+| Precision@5 | 0.178 | 0.244 | +37.5% |
+| NDCG@10 | 0.958 | 0.900 | -6.1% |
+| Context Relevance | 1.533 | 1.733 | +13.0% |
 
 ## Sample Document Comparison (Before vs After)
 

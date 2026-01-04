@@ -10,13 +10,6 @@ load_dotenv()
 def validate_document(doc):
     return len(doc.page_content.strip()) > 50 and not doc.page_content.isspace()
 
-def extract_section_header(text):
-    lines = text.split('\n')[:3]
-    for line in lines:
-        if line.strip() and (line.isupper() or any(word in line.lower() for word in ['abstract', 'introduction', 'conclusion', 'method'])):
-            return line.strip()[:50]
-    return "content"
-
 def load_papers(path):
     if not os.path.exists(path):
         raise FileNotFoundError(f"Directory {path} not found")
@@ -44,8 +37,7 @@ def split_documents(docs):
         source = chunk.metadata.get('source', 'unknown').split('/')[-1]
         chunk.metadata.update({
             'chunk_id': f"{source}_{i}",
-            'total_chunks': len(all_splits),
-            'section': extract_section_header(chunk.page_content)
+            'total_chunks': len(all_splits)
         })
     
     print(f"Split documents into {len(all_splits)} chunks.")

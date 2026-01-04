@@ -11,9 +11,9 @@ load_dotenv()
 class HybridRAGPipeline:
     def __init__(self, persist_directory="./chroma_db", config=None):
         self.config = config or {
-            'dense_k': 8,      # Better recall for difficult queries
-            'sparse_k': 4,     # More BM25 candidates
-            'rerank_k': 5,     # Keep same
+            'dense_k': 8,     
+            'sparse_k': 4,   
+            'rerank_k': 5,  
             'temperature': 0.1
         }
         
@@ -25,8 +25,6 @@ class HybridRAGPipeline:
             model_name=os.getenv("MODEL_NAME"),
             temperature=self.config['temperature']
         )
-        
-
         
     def _load_vectorstore(self, persist_directory):
         if not os.path.exists(persist_directory):
@@ -56,7 +54,6 @@ class HybridRAGPipeline:
         self.bm25_retriever.k = self.config['sparse_k']
         sparse_docs = self.bm25_retriever.invoke(query)
         
-        # Deduplication using metadata + content
         all_docs = dense_docs + sparse_docs
         seen_content = set()
         unique_docs = []
@@ -80,10 +77,8 @@ class HybridRAGPipeline:
         scored_docs = list(zip(documents, scores))
         scored_docs.sort(key=lambda x: x[1], reverse=True)
         
-        # Safety: Always include top dense result if it has high semantic similarity
         reranked = [doc for doc, _ in scored_docs[:top_k]]
         if documents[0] not in reranked and len(documents) > 0:
-            # Replace lowest scored with top dense result
             reranked[-1] = documents[0]
         
         return reranked
@@ -109,10 +104,8 @@ Answer:"""
     def query(self, question):
         docs = self.hybrid_retrieval(question)
         
-        # Generate answer
         answer = self.generate_answer(question, docs)
         
-        # Return result
         return {
             'question': question,
             'answer': answer,
@@ -120,9 +113,6 @@ Answer:"""
             'num_sources': len(docs)
         }
     
-
-
-
 def main():
     print("Starting Hybrid RAG pipeline...")
     
@@ -144,5 +134,4 @@ def main():
     print(f"\n--- Generated Answer ---")
     print(result['answer'])
 
-if __name__ == "__main__":
-    main()
+main()

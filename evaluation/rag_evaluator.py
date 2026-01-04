@@ -1,184 +1,209 @@
 import sys
 import os
-import time
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from baseline_approach.rag_pipeline import load_vector_store, retrieve_documents, generate_answer
-from improved_approach.rag_pipeline import HybridRAGPipeline
-from test_queries import TEST_QUERIES
+# Clear any cached modules
+if 'rag_pipeline' in sys.modules:
+    del sys.modules['rag_pipeline']
 
-class RAGEvaluator:
-    def __init__(self):
-        print("Initializing RAG Evaluator...")
-        
-        # Load baseline approach
-        print("Loading baseline approach...")
-        self.baseline_vectorstore = load_vector_store()
-        
-        # Load improved approach
-        print("Loading improved approach...")
-        self.improved_rag = HybridRAGPipeline()
-        
-        print("Evaluator initialized successfully!")
+# Import baseline functions
+baseline_path = os.path.join(os.path.dirname(__file__), '..', 'baseline_approach')
+sys.path.insert(0, baseline_path)
+import rag_pipeline as baseline_rag
+sys.path.remove(baseline_path)
+
+# Import improved class  
+improved_path = os.path.join(os.path.dirname(__file__), '..', 'improved_approach')
+sys.path.insert(0, improved_path)
+
+# Clear cache again
+if 'rag_pipeline' in sys.modules:
+    del sys.modules['rag_pipeline']
     
-    def evaluate_baseline(self, query):
+import rag_pipeline as improved_rag
+sys.path.remove(improved_path)
+
+# Import test queries
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from evaluation_queries import TEST_QUERIES as test_queries
+from langchain_groq import ChatGroq
+from dotenv import load_dotenv
+import numpy as np
+import time
+
+load_dotenv()
+
+class AdvancedRAGEvaluator:
+    def __init__(self):
+        self.llm = ChatGroq(
+            groq_api_key=os.getenv("GROQ_API_KEY"),
+            model_name=os.getenv("MODEL_NAME"),
+            temperature=0.1
+        )
+        
+    def get_relevance_score(self, query, document_text):
+        """LLM-as-judge relevance scoring (1-5) with aggressive prompt"""
+        prompt = f"""You are evaluating document relevance. Be STRICT and use the full 1-5 scale.
+
+Query: {query}
+
+Document text: {document_text[:300]}
+
+Rate this document's relevance to answering the query:
+1 = Completely irrelevant (mentions different topics)
+2 = Barely relevant (tangentially related)
+3 = Somewhat relevant (related but incomplete)
+4 = Very relevant (directly addresses query)
+5 = Perfectly relevant (completely answers query)
+
+Look at the actual content and be critical. Most documents should NOT be a 3.
+
+Rating (just the number): """
+        
+        try:
+            response = self.llm.invoke(prompt)
+            score = int(response.content.strip())
+            return max(1, min(5, score))
+        except:
+            return 1  # Default to lowest score to avoid masking differences
+    
+    def calculate_precision_at_k(self, relevance_scores, k=5):
+        """Calculate Precision@K"""
+        actual_k = min(k, len(relevance_scores))  # Use actual number available
+        top_k_scores = relevance_scores[:actual_k]
+        relevant_count = sum(1 for score in top_k_scores if score >= 3)
+        return relevant_count / actual_k  # Divide by actual k, not fixed k
+    
+    def calculate_ndcg_at_k(self, relevance_scores, k=10):
+        """Calculate NDCG@K"""
+        def dcg(scores):
+            return sum(score / np.log2(i + 2) for i, score in enumerate(scores))
+        
+        actual_dcg = dcg(relevance_scores[:k])
+        ideal_scores = sorted(relevance_scores[:k], reverse=True)
+        ideal_dcg = dcg(ideal_scores)
+        
+        return actual_dcg / ideal_dcg if ideal_dcg > 0 else 0
+    
+    def calculate_context_relevance(self, relevance_scores):
+        """Average relevance score"""
+        return np.mean(relevance_scores)
+    
+    def evaluate_approach(self, approach_name, retrieval_func, query):
+        """Evaluate single approach with all metrics"""
+        print(f"  Evaluating {approach_name}...")
+        
         start_time = time.time()
-        # Get documents with relevance scores
-        docs_with_scores = self.baseline_vectorstore.similarity_search_with_score(query, k=3)
-        docs = [doc for doc, score in docs_with_scores]
-        scores = [score for doc, score in docs_with_scores]
+        documents = retrieval_func(query)
         retrieval_time = time.time() - start_time
         
-        answer = generate_answer(query, docs)
-        total_time = time.time() - start_time
+        relevance_scores = []
+        for doc in documents:
+            score = self.get_relevance_score(query, doc.page_content)
+            relevance_scores.append(score)
+        
+        precision_5 = self.calculate_precision_at_k(relevance_scores, k=5)
+        ndcg_10 = self.calculate_ndcg_at_k(relevance_scores, k=10)
+        context_relevance = self.calculate_context_relevance(relevance_scores)
         
         return {
-            'docs': docs,
-            'answer': answer,
-            'retrieval_time': retrieval_time,
-            'total_time': total_time,
-            'num_sources': len(docs),
-            'relevance_scores': scores,
-            'avg_relevance': sum(scores) / len(scores) if scores else 0
+            'time': retrieval_time,
+            'precision_5': precision_5,
+            'ndcg_10': ndcg_10,
+            'context_relevance': context_relevance,
+            'documents': documents,
+            'relevance_scores': relevance_scores
         }
     
-    def evaluate_improved(self, query):
-        start_time = time.time()
-        result = self.improved_rag.query(query)
-        total_time = time.time() - start_time
+    def run_evaluation(self):
+        """Run complete evaluation"""
+        print("Initializing Advanced RAG Evaluator...")
         
-        # Get relevance scores for improved approach
-        docs_with_scores = self.improved_rag.vectorstore.similarity_search_with_score(query, k=len(result['sources']))
-        score_map = {doc.page_content: score for doc, score in docs_with_scores}
+        vectorstore = baseline_rag.load_vector_store()
+        hybrid_rag = improved_rag.HybridRAGPipeline()
         
-        # Map scores to retrieved documents
-        relevance_scores = []
-        for doc in result['sources']:
-            # Find closest match in score_map
-            best_score = min(score_map.values()) if score_map else 1.0
-            for content, score in score_map.items():
-                if doc.page_content[:100] in content or content[:100] in doc.page_content:
-                    best_score = score
-                    break
-            relevance_scores.append(best_score)
+        def baseline_retrieve(query):
+            return baseline_rag.retrieve_documents(vectorstore, query, k=5)  # Use module.function
         
-        # Add timing and relevance info
-        result['total_time'] = total_time
-        result['retrieval_time'] = total_time
-        result['relevance_scores'] = relevance_scores
-        result['avg_relevance'] = sum(relevance_scores) / len(relevance_scores) if relevance_scores else 0
+        def improved_retrieve(query):
+            result = hybrid_rag.hybrid_retrieval(query)
+            return result[:5]  # Ensure max 5 documents
         
-        return result
-    
-    def compare_approaches(self):
-        results = {}
+        results = []
         
-        print(f"\nRunning evaluation on {len(TEST_QUERIES)} queries...")
+        print(f"\nRunning advanced evaluation on {len(test_queries)} queries...\n")
         
-        for i, query in enumerate(TEST_QUERIES, 1):
-            print(f"\n[{i}/{len(TEST_QUERIES)}] Evaluating: {query[:50]}...")
+        for i, query in enumerate(test_queries, 1):
+            print(f"[{i}/{len(test_queries)}] Query: {query[:60]}...")
             
-            # Evaluate baseline
-            baseline_result = self.evaluate_baseline(query)
+            baseline_result = self.evaluate_approach("Baseline", baseline_retrieve, query)
+            improved_result = self.evaluate_approach("Improved", improved_retrieve, query)
             
-            # Evaluate improved
-            improved_result = self.evaluate_improved(query)
+            # Safe percentage calculations
+            precision_improvement = ((improved_result['precision_5'] - baseline_result['precision_5']) / max(baseline_result['precision_5'], 0.001)) * 100 if baseline_result['precision_5'] > 0 else 0
+            ndcg_improvement = ((improved_result['ndcg_10'] - baseline_result['ndcg_10']) / max(baseline_result['ndcg_10'], 0.001)) * 100 if baseline_result['ndcg_10'] > 0 else 0
+            relevance_improvement = ((improved_result['context_relevance'] - baseline_result['context_relevance']) / max(baseline_result['context_relevance'], 0.001)) * 100 if baseline_result['context_relevance'] > 0 else 0
             
-            # Calculate speed difference
-            speed_difference = improved_result['total_time'] - baseline_result['total_time']
-            speed_improvement = ((baseline_result['total_time'] - improved_result['total_time']) / baseline_result['total_time']) * 100
+            print(f"   Baseline: P@5={baseline_result['precision_5']:.3f}, NDCG@10={baseline_result['ndcg_10']:.3f}, Rel={baseline_result['context_relevance']:.3f}")
+            print(f"   Improved: P@5={improved_result['precision_5']:.3f}, NDCG@10={improved_result['ndcg_10']:.3f}, Rel={improved_result['context_relevance']:.3f}")
+            print(f"   Improvements: P@5={precision_improvement:+.1f}%, NDCG@10={ndcg_improvement:+.1f}%, Rel={relevance_improvement:+.1f}%")
             
-            # Use LangChain relevance scores
-            baseline_relevance = baseline_result['avg_relevance']
-            improved_relevance = improved_result['avg_relevance']
+            # Debug: Show actual scores and documents
+            print(f"   Baseline scores: {baseline_result['relevance_scores'][:5]}")
+            print(f"   Improved scores: {improved_result['relevance_scores'][:5]}")
+            print(f"   Baseline docs: {[doc.metadata.get('source', '').split('/')[-1] for doc in baseline_result['documents'][:3]]}")
+            print(f"   Improved docs: {[doc.metadata.get('source', '').split('/')[-1] for doc in improved_result['documents'][:3]]}")
+            print(f"   Baseline content: {[doc.page_content[:50] for doc in baseline_result['documents'][:2]]}")
+            print(f"   Improved content: {[doc.page_content[:50] for doc in improved_result['documents'][:2]]}\n")
             
-            # Lower scores are better in similarity search (distance), so flip the improvement calculation
-            relevance_improvement = ((baseline_relevance - improved_relevance) / baseline_relevance * 100) if baseline_relevance > 0 else 0
-            
-            baseline_sources = [doc.metadata.get('source', '').split('/')[-1] for doc in baseline_result['docs']]
-            improved_sources = [doc.metadata.get('source', '').split('/')[-1] for doc in improved_result['sources']]
-            
-            results[query] = {
+            results.append({
+                'query': query,
                 'baseline': baseline_result,
-                'improved': improved_result,
-                'baseline_sources': baseline_sources,
-                'improved_sources': improved_sources,
-                'speed_difference': speed_difference,
-                'speed_improvement': speed_improvement,
-                'baseline_relevance': baseline_relevance,
-                'improved_relevance': improved_relevance,
-                'relevance_improvement': relevance_improvement
-            }
-            
-            print(f"   Baseline: {baseline_result['total_time']:.2f}s (rel: {baseline_relevance:.3f}) | Improved: {improved_result['total_time']:.2f}s (rel: {improved_relevance:.3f}) | Relevance improvement: {relevance_improvement:.1f}%")
+                'improved': improved_result
+            })
         
+        self.generate_advanced_report(results)
         return results
     
-    def generate_report(self, results):
-        report = "# RAG System Comparison Report\n\n"
+    def generate_advanced_report(self, results):
+        """Generate detailed evaluation report with document comparison"""
+        report = "# Advanced RAG Evaluation Report\n\n"
         
-        # Summary statistics
-        avg_baseline_time = sum(r['baseline']['total_time'] for r in results.values()) / len(results)
-        avg_improved_time = sum(r['improved']['total_time'] for r in results.values()) / len(results)
-        avg_speed_improvement = sum(r['speed_improvement'] for r in results.values()) / len(results)
+        # Calculate averages
+        avg_baseline_p5 = np.mean([r['baseline']['precision_5'] for r in results])
+        avg_improved_p5 = np.mean([r['improved']['precision_5'] for r in results])
+        avg_baseline_ndcg = np.mean([r['baseline']['ndcg_10'] for r in results])
+        avg_improved_ndcg = np.mean([r['improved']['ndcg_10'] for r in results])
+        avg_baseline_rel = np.mean([r['baseline']['context_relevance'] for r in results])
+        avg_improved_rel = np.mean([r['improved']['context_relevance'] for r in results])
         
-        report += "## Summary\n\n"
-        report += f"- **Total queries evaluated**: {len(results)}\n"
-        report += f"- **Average baseline time**: {avg_baseline_time:.2f}s\n"
-        report += f"- **Average improved time**: {avg_improved_time:.2f}s\n"
-        report += f"- **Average speed improvement**: {avg_speed_improvement:.1f}%\n\n"
+        report += f"## Summary\n\n"
+        report += f"| Metric | Baseline | Improved | Improvement |\n"
+        report += f"|--------|----------|----------|-------------|\n"
+        report += f"| Precision@5 | {avg_baseline_p5:.3f} | {avg_improved_p5:.3f} | {((avg_improved_p5-avg_baseline_p5)/max(avg_baseline_p5, 0.001))*100:+.1f}% |\n"
+        report += f"| NDCG@10 | {avg_baseline_ndcg:.3f} | {avg_improved_ndcg:.3f} | {((avg_improved_ndcg-avg_baseline_ndcg)/max(avg_baseline_ndcg, 0.001))*100:+.1f}% |\n"
+        report += f"| Context Relevance | {avg_baseline_rel:.3f} | {avg_improved_rel:.3f} | {((avg_improved_rel-avg_baseline_rel)/max(avg_baseline_rel, 0.001))*100:+.1f}% |\n\n"
         
-        # Detailed comparison table
-        report += "## Detailed Comparison\n\n"
-        report += "| Query | Baseline Time | Improved Time | Speed Improvement | Baseline Sources | Improved Sources |\n"
-        report += "|-------|---------------|---------------|-------------------|------------------|------------------|\n"
-        
-        for query, result in results.items():
-            baseline = result['baseline']
-            improved = result['improved']
-            improvement = result['speed_improvement']
+        # Document comparison for first query (addresses problem statement requirement)
+        if results:
+            first_result = results[0]
+            report += "## Sample Document Comparison (Before vs After)\n\n"
+            report += f"**Query**: {first_result['query']}\n\n"
             
-            # Truncate long queries for table
-            short_query = query[:40] + "..." if len(query) > 40 else query
+            report += "### Baseline Retrieved Documents:\n"
+            for i, doc in enumerate(first_result['baseline']['documents'][:3], 1):
+                source = doc.metadata.get('source', 'Unknown').split('/')[-1]
+                report += f"{i}. **{source}**\n   {doc.page_content[:100]}...\n\n"
             
-            report += f"| {short_query} | {baseline['total_time']:.2f}s | {improved['total_time']:.2f}s | +{improvement:.1f}% | {baseline['num_sources']} | {improved['num_sources']} |\n"
+            report += "### Improved Retrieved Documents:\n"
+            for i, doc in enumerate(first_result['improved']['documents'][:3], 1):
+                source = doc.metadata.get('source', 'Unknown').split('/')[-1]
+                report += f"{i}. **{source}**\n   {doc.page_content[:100]}...\n\n"
         
-        # Retrieved documents comparison for first query
-        report += "\n## Sample Retrieval Comparison\n\n"
-        first_query = list(results.keys())[0]
-        first_result = results[first_query]
-        
-        report += f"**Query**: {first_query}\n\n"
-        
-        report += "### Baseline Retrieved Documents:\n"
-        for i, doc in enumerate(first_result['baseline']['docs'], 1):
-            source = doc.metadata.get('source', 'Unknown').split('/')[-1]
-            report += f"{i}. **{source}**\n"
-            report += f"   {doc.page_content[:150]}...\n\n"
-        
-        report += "### Improved Retrieved Documents:\n"
-        for i, doc in enumerate(first_result['improved']['sources'], 1):
-            source = doc.metadata.get('source', 'Unknown').split('/')[-1]
-            report += f"{i}. **{source}**\n"
-            report += f"   {doc.page_content[:150]}...\n\n"
-        
-        # Save report
-        with open('comparison_report.md', 'w') as f:
+        with open("advanced_evaluation_report.md", "w") as f:
             f.write(report)
         
-        print(f"\nReport saved to: comparison_report.md")
-        return report
-
-def main():
-    evaluator = RAGEvaluator()
-    results = evaluator.compare_approaches()
-    report = evaluator.generate_report(results)
-    
-    print("\n" + "="*50)
-    print("EVALUATION COMPLETE")
-    print("="*50)
-    print(f"Evaluated {len(results)} queries")
-    print("Report generated: comparison_report.md")
+        print(f"Advanced report saved to: advanced_evaluation_report.md")
 
 if __name__ == "__main__":
-    main()
+    evaluator = AdvancedRAGEvaluator()
+    evaluator.run_evaluation()
