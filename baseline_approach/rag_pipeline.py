@@ -60,4 +60,5 @@ def main():
     answer = generate_answer(query, results)
     print(answer)
 
-main()
+if __name__ == "__main__":
+    main()

@@ -1,7 +1,0 @@
-- langchain - main framework
-- langchain-openai - OpenAI integration
-- langchain-chroma - Chroma integration
-- langchain-community - community tools
-- langchain-text-splitters - text chunking
-- python-dotenv - environment variables
-- pypdf - PDF processing

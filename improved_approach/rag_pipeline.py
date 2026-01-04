@@ -134,4 +134,5 @@ def main():
     print(f"\n--- Generated Answer ---")
     print(result['answer'])
 
-main()
+if __name__ == "__main__":
+    main()

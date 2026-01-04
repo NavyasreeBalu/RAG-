@@ -1,38 +1,20 @@
 import sys
 import os
-
-# Clear any cached modules
-if 'rag_pipeline' in sys.modules:
-    del sys.modules['rag_pipeline']
-
-# Import baseline functions
-baseline_path = os.path.join(os.path.dirname(__file__), '..', 'baseline_approach')
-sys.path.insert(0, baseline_path)
-import rag_pipeline as baseline_rag
-sys.path.remove(baseline_path)
-
-# Import improved class  
-improved_path = os.path.join(os.path.dirname(__file__), '..', 'improved_approach')
-sys.path.insert(0, improved_path)
-
-# Clear cache again
-if 'rag_pipeline' in sys.modules:
-    del sys.modules['rag_pipeline']
-    
-import rag_pipeline as improved_rag
-sys.path.remove(improved_path)
-
-# Import test queries
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from evaluation_queries import TEST_QUERIES as test_queries
-from langchain_groq import ChatGroq
-from dotenv import load_dotenv
 import numpy as np
 import time
+from langchain_groq import ChatGroq
+from dotenv import load_dotenv
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+from baseline_approach.rag_pipeline import load_vector_store, generate_answer
+from improved_approach.rag_pipeline import HybridRAGPipeline
+from evaluation_queries import TEST_QUERIES
 
 load_dotenv()
 
-class AdvancedRAGEvaluator:
+class RAG_Evaluator:
     def __init__(self):
         self.llm = ChatGroq(
             groq_api_key=os.getenv("GROQ_API_KEY"),
@@ -41,30 +23,27 @@ class AdvancedRAGEvaluator:
         )
         
     def get_relevance_score(self, query, document_text):
-        """LLM-as-judge relevance scoring (1-5) with aggressive prompt"""
-        prompt = f"""You are evaluating document relevance. Be STRICT and use the full 1-5 scale.
+        """LLM-as-judge relevance scoring (1-5)"""
+        prompt = f"""Rate how relevant this document is to answering the query (1-5):
 
 Query: {query}
 
-Document text: {document_text[:300]}
+Document: {document_text[:1000]}
 
-Rate this document's relevance to answering the query:
-1 = Completely irrelevant (mentions different topics)
-2 = Barely relevant (tangentially related)
-3 = Somewhat relevant (related but incomplete)
-4 = Very relevant (directly addresses query)
-5 = Perfectly relevant (completely answers query)
+5 = Directly answers the query
+4 = Very relevant 
+3 = Somewhat relevant
+2 = Barely relevant
+1 = Not relevant
 
-Look at the actual content and be critical. Most documents should NOT be a 3.
-
-Rating (just the number): """
+Score:"""
         
         try:
             response = self.llm.invoke(prompt)
             score = int(response.content.strip())
             return max(1, min(5, score))
         except:
-            return 1  # Default to lowest score to avoid masking differences
+            return 1
     
     def calculate_precision_at_k(self, relevance_scores, k=5):
         """Calculate Precision@K"""
@@ -116,13 +95,13 @@ Rating (just the number): """
     
     def run_evaluation(self):
         """Run complete evaluation"""
-        print("Initializing Advanced RAG Evaluator...")
+        print("Initializing RAG Evaluator...")
         
-        vectorstore = baseline_rag.load_vector_store()
-        hybrid_rag = improved_rag.HybridRAGPipeline()
+        vectorstore = load_vector_store()
+        hybrid_rag = HybridRAGPipeline()
         
         def baseline_retrieve(query):
-            return baseline_rag.retrieve_documents(vectorstore, query, k=5)  # Use module.function
+            return vectorstore.similarity_search(query, k=5)
         
         def improved_retrieve(query):
             result = hybrid_rag.hybrid_retrieval(query)
@@ -130,10 +109,10 @@ Rating (just the number): """
         
         results = []
         
-        print(f"\nRunning advanced evaluation on {len(test_queries)} queries...\n")
+        print(f"\nRunning evaluation on {len(TEST_QUERIES)} queries...\n")
         
-        for i, query in enumerate(test_queries, 1):
-            print(f"[{i}/{len(test_queries)}] Query: {query[:60]}...")
+        for i, query in enumerate(TEST_QUERIES, 1):
+            print(f"[{i}/{len(TEST_QUERIES)}] {query[:60]}...")
             
             baseline_result = self.evaluate_approach("Baseline", baseline_retrieve, query)
             improved_result = self.evaluate_approach("Improved", improved_retrieve, query)
@@ -143,17 +122,10 @@ Rating (just the number): """
             ndcg_improvement = ((improved_result['ndcg_10'] - baseline_result['ndcg_10']) / max(baseline_result['ndcg_10'], 0.001)) * 100 if baseline_result['ndcg_10'] > 0 else 0
             relevance_improvement = ((improved_result['context_relevance'] - baseline_result['context_relevance']) / max(baseline_result['context_relevance'], 0.001)) * 100 if baseline_result['context_relevance'] > 0 else 0
             
-            print(f"   Baseline: P@5={baseline_result['precision_5']:.3f}, NDCG@10={baseline_result['ndcg_10']:.3f}, Rel={baseline_result['context_relevance']:.3f}")
-            print(f"   Improved: P@5={improved_result['precision_5']:.3f}, NDCG@10={improved_result['ndcg_10']:.3f}, Rel={improved_result['context_relevance']:.3f}")
-            print(f"   Improvements: P@5={precision_improvement:+.1f}%, NDCG@10={ndcg_improvement:+.1f}%, Rel={relevance_improvement:+.1f}%")
-            
-            # Debug: Show actual scores and documents
-            print(f"   Baseline scores: {baseline_result['relevance_scores'][:5]}")
-            print(f"   Improved scores: {improved_result['relevance_scores'][:5]}")
-            print(f"   Baseline docs: {[doc.metadata.get('source', '').split('/')[-1] for doc in baseline_result['documents'][:3]]}")
-            print(f"   Improved docs: {[doc.metadata.get('source', '').split('/')[-1] for doc in improved_result['documents'][:3]]}")
-            print(f"   Baseline content: {[doc.page_content[:50] for doc in baseline_result['documents'][:2]]}")
-            print(f"   Improved content: {[doc.page_content[:50] for doc in improved_result['documents'][:2]]}\n")
+            print(f"   Baseline: P@5={baseline_result['precision_5']:.3f}, Rel={baseline_result['context_relevance']:.3f}")
+            print(f"   Improved: P@5={improved_result['precision_5']:.3f}, Rel={improved_result['context_relevance']:.3f}")
+            print(f"   Change:   P@5={precision_improvement:+.1f}%, Rel={relevance_improvement:+.1f}%")
+            print(f"   Sources:  {[doc.metadata.get('source', '').split('/')[-1][:25] for doc in improved_result['documents'][:3]]}\n")
             
             results.append({
                 'query': query,
@@ -161,32 +133,57 @@ Rating (just the number): """
                 'improved': improved_result
             })
         
-        self.generate_advanced_report(results)
+        self.generate_evaluation_report(results)
         return results
     
-    def generate_advanced_report(self, results):
-        """Generate detailed evaluation report with document comparison"""
-        report = "# Advanced RAG Evaluation Report\n\n"
+    def generate_evaluation_report(self, results):
+        """Generate detailed evaluation report with visualizations"""
+        report = "# RAG System Evaluation Report\n\n"
         
         # Calculate averages
         avg_baseline_p5 = np.mean([r['baseline']['precision_5'] for r in results])
         avg_improved_p5 = np.mean([r['improved']['precision_5'] for r in results])
-        avg_baseline_ndcg = np.mean([r['baseline']['ndcg_10'] for r in results])
-        avg_improved_ndcg = np.mean([r['improved']['ndcg_10'] for r in results])
         avg_baseline_rel = np.mean([r['baseline']['context_relevance'] for r in results])
         avg_improved_rel = np.mean([r['improved']['context_relevance'] for r in results])
         
-        report += f"## Summary\n\n"
-        report += f"| Metric | Baseline | Improved | Improvement |\n"
-        report += f"|--------|----------|----------|-------------|\n"
+        # Helper functions for visualization
+        def get_bar(value, max_val=1.0, width=20):
+            filled = int((value / max_val) * width)
+            return '█' * filled + '░' * (width - filled)
+        
+        def get_arrow(improvement):
+            if improvement > 50: return '↗↗↗'
+            elif improvement > 10: return '↗↗'
+            elif improvement > 0: return '↗ '
+            elif improvement < -10: return '↘↘'
+            elif improvement < 0: return '↘ '
+            else: return '→ '
+        
+        report += f"## Performance Summary\n\n"
+        report += f"| Metric | Baseline | Improved | Change |\n"
+        report += f"|--------|----------|----------|--------|\n"
         report += f"| Precision@5 | {avg_baseline_p5:.3f} | {avg_improved_p5:.3f} | {((avg_improved_p5-avg_baseline_p5)/max(avg_baseline_p5, 0.001))*100:+.1f}% |\n"
-        report += f"| NDCG@10 | {avg_baseline_ndcg:.3f} | {avg_improved_ndcg:.3f} | {((avg_improved_ndcg-avg_baseline_ndcg)/max(avg_baseline_ndcg, 0.001))*100:+.1f}% |\n"
         report += f"| Context Relevance | {avg_baseline_rel:.3f} | {avg_improved_rel:.3f} | {((avg_improved_rel-avg_baseline_rel)/max(avg_baseline_rel, 0.001))*100:+.1f}% |\n\n"
         
-        # Document comparison for first query (addresses problem statement requirement)
+        report += f"## Query Performance Visualization\n\n"
+        report += f"```\n"
+        
+        for i, result in enumerate(results, 1):
+            query = result['query'][:50] + "..." if len(result['query']) > 50 else result['query']
+            baseline_p5 = result['baseline']['precision_5']
+            improved_p5 = result['improved']['precision_5']
+            improvement = ((improved_p5 - baseline_p5) / max(baseline_p5, 0.001)) * 100 if baseline_p5 > 0 else 0
+            
+            report += f"[{i}] {query}\n"
+            report += f"    Baseline: P@5={baseline_p5:.3f} {get_bar(baseline_p5)}\n"
+            report += f"    Improved: P@5={improved_p5:.3f} {get_bar(improved_p5)} {get_arrow(improvement)} {improvement:+.1f}%\n\n"
+        
+        report += f"```\n\n"
+        
+        # Document comparison for first query
         if results:
             first_result = results[0]
-            report += "## Sample Document Comparison (Before vs After)\n\n"
+            report += "## Sample Document Comparison\n\n"
             report += f"**Query**: {first_result['query']}\n\n"
             
             report += "### Baseline Retrieved Documents:\n"
@@ -199,11 +196,11 @@ Rating (just the number): """
                 source = doc.metadata.get('source', 'Unknown').split('/')[-1]
                 report += f"{i}. **{source}**\n   {doc.page_content[:100]}...\n\n"
         
-        with open("advanced_evaluation_report.md", "w") as f:
+        with open("evaluation_report.md", "w") as f:
             f.write(report)
         
-        print(f"Advanced report saved to: advanced_evaluation_report.md")
+        print(f"Report with visualizations saved to: evaluation_report.md")
 
 if __name__ == "__main__":
-    evaluator = AdvancedRAGEvaluator()
+    evaluator = RAG_Evaluator()
     evaluator.run_evaluation()
