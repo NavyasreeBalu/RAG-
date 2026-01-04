@@ -7,7 +7,7 @@
 
 ## Installation
 
-### Setup Environment
+### 1. Setup Environment
 ```bash
 cd gen101
 python3 -m venv venv
@@ -30,7 +30,7 @@ echo "MODEL_NAME=llama3-8b-8192" >> .env
 
 ### 4. Build Knowledge Base 
 ```bash
-python3 ingestion_pipeline.py
+python src/data_ingestion.py
 ```
 This processes the 10 research papers and creates the vector database.
 
@@ -38,17 +38,27 @@ This processes the 10 research papers and creates the vector database.
 
 **Baseline RAG:**
 ```bash
-python3 baseline_approach/rag_pipeline.py
+python src/baseline_retriever.py
 ```
 
-**Improved RAG:**
+**Hybrid RAG:**
 ```bash
-python3 improved_approach/rag_pipeline.py
+python src/hybrid_retriever.py
 ```
 
 ### 6. Run Complete Evaluation
 ```bash
-python3 evaluation/rag_evaluator.py
+python src/evaluator.py
 ```
-This compares both approaches and generates `evaluation_report.md`.
+This compares both approaches and generates `outputs/evaluation_report.md`.
+
+### 7. View Results
+```bash
+cat outputs/evaluation_report.md
+```
+
+## Quick Run (All Steps)
+```bash
+python src/data_ingestion.py && python src/evaluator.py
+```
 

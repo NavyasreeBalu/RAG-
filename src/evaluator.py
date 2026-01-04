@@ -5,12 +5,9 @@ import time
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 
-# Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-from baseline_approach.rag_pipeline import load_vector_store, generate_answer
-from improved_approach.rag_pipeline import HybridRAGPipeline
-from evaluation_queries import TEST_QUERIES
+from baseline_retriever import load_vector_store, generate_answer
+from hybrid_retriever import HybridRAGPipeline
+from test_queries import TEST_QUERIES
 
 load_dotenv()
 
@@ -24,19 +21,20 @@ class RAG_Evaluator:
         
     def get_relevance_score(self, query, document_text):
         """LLM-as-judge relevance scoring (1-5)"""
-        prompt = f"""Rate how relevant this document is to answering the query (1-5):
+        prompt = f"""Evaluate how well this document helps answer the query on a scale of 1-5:
 
 Query: {query}
 
 Document: {document_text[:1000]}
 
-5 = Directly answers the query
-4 = Very relevant 
-3 = Somewhat relevant
-2 = Barely relevant
-1 = Not relevant
+Scoring Guidelines:
+5 = Directly and comprehensively answers the query
+4 = Contains most information needed to answer the query  
+3 = Provides useful relevant information
+2 = Contains some relevant information but limited
+1 = Little to no relevant information
 
-Score:"""
+Please respond with only the integer score (1-5):"""
         
         try:
             response = self.llm.invoke(prompt)
@@ -196,10 +194,10 @@ Score:"""
                 source = doc.metadata.get('source', 'Unknown').split('/')[-1]
                 report += f"{i}. **{source}**\n   {doc.page_content[:100]}...\n\n"
         
-        with open("evaluation_report.md", "w") as f:
+        with open("outputs/evaluation_report.md", "w") as f:
             f.write(report)
         
-        print(f"Report with visualizations saved to: evaluation_report.md")
+        print(f"Report with visualizations saved to: outputs/evaluation_report.md")
 
 if __name__ == "__main__":
     evaluator = RAG_Evaluator()

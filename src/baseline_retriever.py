@@ -8,7 +8,7 @@ load_dotenv()
 
 def load_vector_store():
     if not os.path.exists("./chroma_db"):
-        raise FileNotFoundError("Vector store not found. Run ingestion_pipeline.py first.")
+        raise FileNotFoundError("Vector store not found. Run data_ingestion.py first.")
     
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vectorstore = Chroma(

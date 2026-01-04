@@ -28,7 +28,7 @@ class HybridRAGPipeline:
         
     def _load_vectorstore(self, persist_directory):
         if not os.path.exists(persist_directory):
-            raise FileNotFoundError("Vector store not found. Run ingestion_pipeline.py first.")
+            raise FileNotFoundError("Vector store not found. Run data_ingestion.py first.")
         
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
