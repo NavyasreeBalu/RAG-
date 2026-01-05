@@ -37,7 +37,8 @@ Answer:"""
         response = llm.invoke(prompt)
         return response.content
     except Exception as e:
-        return f"Answer generation failed: {str(e)}"
+        error_msg = f"Answer generation failed: {str(e)}"
+        return error_msg
 
 def main():
     print("Starting RAG pipeline...")
@@ -48,7 +49,7 @@ def main():
     query = "What are transformer architectures?"
     print(f"Query: {query}")
     
-    results = vectorstore.similarity_search(query, k=3)
+    results = vectorstore.similarity_search(query, k=5)
     print(f"Retrieved {len(results)} documents")
     
     for i, doc in enumerate(results, 1):

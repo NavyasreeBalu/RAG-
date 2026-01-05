@@ -28,18 +28,9 @@ def load_papers(path):
 def split_documents(docs):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1500, 
-        chunk_overlap=300, 
-        add_start_index=True,  
+        chunk_overlap=300
     )
     all_splits = text_splitter.split_documents(docs)
-    
-    for i, chunk in enumerate(all_splits):
-        source = chunk.metadata.get('source', 'unknown').split('/')[-1]
-        chunk.metadata.update({
-            'chunk_id': f"{source}_{i}",
-            'total_chunks': len(all_splits)
-        })
-    
     print(f"Split documents into {len(all_splits)} chunks.")
     return all_splits
 

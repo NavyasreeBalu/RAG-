@@ -44,26 +44,44 @@ class HybridRAGPipeline:
         
         return BM25Retriever.from_documents(documents)
     
+    def _reciprocal_rank_fusion(self, dense_docs, sparse_docs, k=60):
+        """Reciprocal Rank Fusion for combining dense and sparse retrieval results"""
+        rrf_scores = {}
+        
+        for rank, doc in enumerate(dense_docs):
+            doc_id = id(doc)
+            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + 1 / (k + rank + 1)
+        
+        for rank, doc in enumerate(sparse_docs):
+            doc_id = id(doc)
+            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + 1 / (k + rank + 1)
+        
+        all_docs = dense_docs + sparse_docs
+        unique_docs = []
+        seen_ids = set()
+        
+        for doc in all_docs:
+            doc_id = id(doc)
+            if doc_id not in seen_ids:
+                seen_ids.add(doc_id)
+                unique_docs.append((doc, rrf_scores[doc_id]))
+        
+        unique_docs.sort(key=lambda x: x[1], reverse=True)
+        
+        return [doc for doc, score in unique_docs]
+    
     def hybrid_retrieval(self, query):
-        """
-        Hybrid retrieval combining dense semantic search with sparse keyword matching.
-        Uses cross-encoder reranking for final document selection.
-        """
+        """Hybrid retrieval using Reciprocal Rank Fusion (RRF)"""
         dense_docs = self.vectorstore.similarity_search(query, k=self.config['dense_k'])
         
         self.bm25_retriever.k = self.config['sparse_k']
         sparse_docs = self.bm25_retriever.invoke(query)
         
-        all_docs = dense_docs + sparse_docs
-        seen_content = set()
-        unique_docs = []
-        for doc in all_docs:
-            content_key = f"{doc.metadata.get('source', '')}_{doc.page_content[:100]}"
-            if content_key not in seen_content:
-                seen_content.add(content_key)
-                unique_docs.append(doc)
+        fused_docs = self._reciprocal_rank_fusion(dense_docs, sparse_docs)
         
-        final_docs = self._rerank_documents(query, unique_docs, self.config['rerank_k'])
+        top_docs = fused_docs[:self.config['dense_k'] + self.config['sparse_k']]
+        
+        final_docs = self._rerank_documents(query, top_docs, self.config['rerank_k'])
         
         return final_docs
     
@@ -78,8 +96,6 @@ class HybridRAGPipeline:
         scored_docs.sort(key=lambda x: x[1], reverse=True)
         
         reranked = [doc for doc, _ in scored_docs[:top_k]]
-        if documents[0] not in reranked and len(documents) > 0:
-            reranked[-1] = documents[0]
         
         return reranked
     
@@ -99,7 +115,8 @@ Answer:"""
             response = self.llm.invoke(prompt)
             return response.content
         except Exception as e:
-            return f"Answer generation failed: {str(e)}"
+            error_msg = f"Answer generation failed: {str(e)}"
+            return error_msg
     
     def query(self, question):
         docs = self.hybrid_retrieval(question)
