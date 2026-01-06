@@ -1,17 +1,26 @@
 # Core RAG Dependencies
-langchain-chroma==0.1.4
-langchain-huggingface==0.1.2
-langchain-google-genai==2.0.8
-langchain-core==0.3.29
+langchain==1.2.0
+langchain-chroma==1.1.0
+langchain-community==0.4.1
+langchain-core==1.2.5
+langchain-groq==1.1.1
+langchain-huggingface==1.2.0
 
 # ML/AI Libraries
 sentence-transformers==5.2.0
 transformers==4.57.3
-torch==2.9.1
+torch==2.9.1+cpu
+numpy==2.4.0
+
+# BM25 Retrieval
+rank-bm25==0.2.2
+
+# Document Processing
+pypdf==6.5.0
 
 # Utilities
-python-dotenv==1.0.1
-pypdf==5.1.0
+python-dotenv==1.2.1
+chromadb==1.4.0
 
-# Optional (for development)
-google-generativeai==0.8.3
+# Vector Database
+huggingface-hub==0.36.0
