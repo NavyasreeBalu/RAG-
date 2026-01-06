@@ -9,18 +9,18 @@ langchain-huggingface==1.2.0
 # ML/AI Libraries
 sentence-transformers==5.2.0
 transformers==4.57.3
-torch==2.9.1+cpu
-numpy==2.4.0
+torch>=2.9.0
+numpy>=2.0.0
 
 # BM25 Retrieval
 rank-bm25==0.2.2
 
 # Document Processing
-pypdf==6.5.0
+pypdf>=6.0.0
 
 # Utilities
-python-dotenv==1.2.1
-chromadb==1.4.0
+python-dotenv>=1.0.0
+chromadb>=1.4.0
 
 # Vector Database
-huggingface-hub==0.36.0
+huggingface-hub>=0.36.0
