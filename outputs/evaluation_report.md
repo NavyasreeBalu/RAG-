@@ -3,18 +3,18 @@
 ## Executive Summary
 **Baseline Precision@5:** 0.29
 **Hybrid Precision@5:** 0.40
-**P@5 Improvement:** +40.0%
+**P@5 Improvement:** +51.7%
 
 **Baseline NDCG@5:** 0.94
 **Hybrid NDCG@5:** 0.94
-**NDCG@5 Improvement:** -0.2%
+**NDCG@5 Improvement:** +0.2%
 
 ## Detailed Query Results
 ### Q: What is the difference between RAG-Sequence and RAG-Token?
 
 **Metrics:**
-- Baseline P@5: 0.40, NDCG@5: 0.94
-- Hybrid P@5: 0.20, NDCG@5: 1.00
+- Baseline P@5: 0.20, NDCG@5: 0.94
+- Hybrid P@5: 0.40, NDCG@5: 1.00
 
 **Baseline Retrieved Docs:**
 1. Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks (2020).pdf: pRAG-Sequence(y|x) ≈
@@ -752,4 +752,3 @@ Based on the given context, there is no direct information about the question "I
 The answer is not directly available in the given context. However, based on general knowledge, mangoes are typically available during the summer season in many parts of the world. In the Northern Hem...
 
 ---
-

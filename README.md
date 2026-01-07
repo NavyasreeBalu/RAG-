@@ -1,95 +1,89 @@
-# RAG System - Gen101 AI Internship Assignment
+# RAG - Improved Retrieval-Augmented Generation System
 
-A hybrid Retrieval-Augmented Generation (RAG) system that combines dense semantic search, sparse BM25 retrieval, and cross-encoder reranking for improved document retrieval performance.
+## Setup & Usage
 
-## 🎯 Project Overview
+See [SETUP.md](SETUP.md) for installation instructions and usage commands.
 
-This project implements and compares two RAG approaches:
-- **Baseline**: Simple cosine similarity search (k=3)
-- **Improved**: Hybrid retrieval with dense + sparse + reranking
+## Problem Statement
 
-The improved approach achieved **28.6% precision improvement** with **100-200% gains on technical queries**.
+Modern AI assistants use Retrieval-Augmented Generation (RAG), but even with retrieval in place, generated responses may contain fabricated information, rely on incomplete documents, or combine unrelated content from multiple sources. This project improves retrieval logic to ensure LLMs receive reliable, contextually relevant evidence before generating responses.
 
-## 📁 Project Structure
+## Technologies Used
 
+- **LangChain**: Framework for building RAG applications and document processing
+- **Vector Store**: ChromaDB with sentence-transformers embeddings
+- **LLM**: ChatGroq (Llama-3.1) for answer generation and evaluation
+
+## Architecture Overview
+
+**Data Ingestion Pipeline:**
 ```
-gen101/
-├── src/                           # Source code
-│   ├── data_ingestion.py          # Document processing pipeline
-│   ├── baseline_retriever.py      # Simple RAG implementation
-│   ├── hybrid_retriever.py        # Advanced hybrid RAG
-│   ├── evaluator.py               # LLM-as-judge evaluation
-│   └── test_queries.py            # Evaluation queries
-├── outputs/                       # Generated results
-├── research_papers/               # Input documents (10 LLM papers)
-├── SETUP.md                       # Detailed setup instructions
-├── requirements.txt               # Python dependencies
-└── README.md                      # This file
+Research Papers (PDFs)
+    ↓
+Text Extraction
+    ↓
+Recursive Character Chunking
+    ↓
+Sentence-Transformer Embeddings
+    ↓
+ChromaDB Vector Store
 ```
+*Both baseline and improved approaches use the same ingestion pipeline*
 
-## 🚀 Quick Start
-
-For detailed setup instructions, see **[SETUP.md](SETUP.md)**
-
-```bash
-# 1. Install dependencies
-pip install -r requirements.txt
-
-# 2. Set up environment
-cp .env.example .env
-# Add your GROQ_API_KEY
-
-# 3. Run data ingestion
-python src/data_ingestion.py
-
-# 4. Run evaluation
-python src/evaluator.py
+**Baseline Approach:**
+```
+Query Input
+    ↓
+Similarity Search
+    ↓
+Final Results
 ```
 
-## 🔧 Implementation Details
+**Improved Approach:**
+```
+Query Input
+    ↓
+Dense Search ──┐
+               ├── Reciprocal Rank Fusion
+Sparse Search ─┘
+    ↓
+Cross-Encoder Reranking
+    ↓
+Final Results
+```
 
-### Hybrid Retrieval Strategy
-- **Dense Search**: Semantic similarity (k=8)
-- **Sparse Search**: BM25 keyword matching (k=4)  
-- **Cross-Encoder Reranking**: Final relevance scoring (k=5)
-- **Safety Mechanism**: Preserves top semantic results
+## Solution: Hybrid Retrieval Strategy
 
-### Evaluation Framework
-- **LLM-as-Judge**: ChatGroq with balanced scoring prompt
-- **Metrics**: Precision@5, NDCG@10, Context Relevance
-- **Robust Parsing**: Handles LLM response variations
+Our approach combines four complementary retrieval methods:
 
-## 📊 Performance Results
+### Stage 1: Dense Semantic Search
+- Retrieves candidates based on contextual meaning
+- Captures conceptual relationships and synonyms
 
-| Metric | Baseline | Improved | Improvement |
-|--------|----------|----------|-------------|
-| Precision@5 | 2.8 | 3.6 | +28.6% |
-| Technical Queries | 1.5 | 4.0 | +166.7% |
-| Overall NDCG@10 | 0.65 | 0.78 | +20.0% |
+### Stage 2: Sparse Search
+- Retrieves candidates based on exact keyword matches
+- Excels at finding specific technical terms, numbers, and proper nouns
 
-## 🛠 Technical Stack
+### Stage 3: Reciprocal Rank Fusion (RRF)
+- Applies RRF formula: score = 1/(k + rank + 1) for each retrieval method
+- Deduplicates and creates unified candidate pool
 
-- **Vector Store**: ChromaDB with sentence-transformers
-- **Sparse Retrieval**: BM25 via rank-bm25
-- **Reranking**: Cross-encoder models
-- **LLM Evaluation**: ChatGroq (Llama-3.1-70b)
-- **Framework**: LangChain for RAG pipeline
+### Stage 4: Cross-Encoder Reranking
+- Reranks all candidates using query-document interaction modeling
+- Returns final most relevant documents
 
-## 📋 Requirements
+## Results
 
-- Python 3.8+
-- GROQ API key for evaluation
-- 4GB+ RAM for vector embeddings
-- ~2GB storage for models and data
+**Key Achievement: 51.7% improvement in retrieval precision**
 
-## 🎯 Key Features
+| Metric | Baseline | Hybrid | Improvement |
+|--------|----------|---------|-------------|
+| Precision@5 | 0.29 | 0.44 | +51.7% |
+| NDCG@5 | 0.65 | 0.78 | +0.2 |
 
-✅ **Hybrid Retrieval**: Combines multiple search strategies  
-✅ **Safety Mechanisms**: Prevents cross-encoder regression  
-✅ **Comprehensive Evaluation**: Multiple metrics with LLM judging  
-✅ **Production Ready**: Class-based design, error handling  
-✅ **Optimized Performance**: Efficient model loading and caching  
+- **Precision@5**: Percentage of top 5 documents that are relevant (score ≥3)
+- **NDCG@5**: Normalized ranking quality of top 5 results
 
----
+See [results.md](results.md) for complete evaluation results and analysis.
 
-**For complete setup instructions and troubleshooting, see [SETUP.md](SETUP.md)**
+This hybrid approach successfully reduces fabricated information, improves document relevance, and enhances reliability for enterprise RAG applications.

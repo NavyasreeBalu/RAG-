@@ -1,15 +1,14 @@
 # RAG System Setup Guide
 
 ## Prerequisites
-- Python 3.8+
-- ~2GB disk space for models and vector database
+- Python 3.0+
 - GROQ API key (free tier available at https://console.groq.com)
 
 ## Installation
 
 ### 1. Setup Environment
 ```bash
-cd gen101
+cd RAG
 python3 -m venv venv
 source venv/bin/activate 
 ```
@@ -61,27 +60,27 @@ cat outputs/evaluation_report.md
 ```
 
 ## Project Structure
+
 ```
-gen101/
-├── rag_system/
-│   ├── data_ingestion.py      # Document processing
-│   ├── baseline_retriever.py  # Simple cosine similarity RAG
-│   ├── hybrid_retriever.py    # Dense + Sparse + Reranking
-│   ├── evaluator.py          # LLM-as-judge evaluation
-│   └── test_queries.py       # 21 evaluation queries
-├── research_papers/          # 10 LLM research papers
-├── chroma_db/               # Vector database (created after ingestion)
-├── outputs/                 # Evaluation results
-└── requirements.txt
+├── README.md                 # Project overview and approach
+├── SETUP.md                 # Installation and usage instructions
+├── results.md               # Evaluation results and analysis
+├── problem_statement.md     # Original problem definition
+├── requirements.txt         # Python dependencies
+├── rag_system/             # Core implementation
+│   ├── baseline_retriever.py    # Simple cosine similarity baseline
+│   ├── hybrid_retriever.py      # Hybrid retrieval implementation
+│   ├── data_ingestion.py        # Document processing and indexing
+│   ├── evaluator.py             # Evaluation framework
+│   └── test_queries.py          # Test query definitions
+├── research_papers/        # LLM research paper corpus (10 papers)
+├── chroma_db/             # Vector database storage
+└── outputs/               # Detailed evaluation reports
 ```
+
+## Project Structure
 
 ## Quick Run (All Steps)
 ```bash
 python rag_system/data_ingestion.py && python rag_system/evaluator.py
 ```
-
-## Evaluation Metrics
-- **Precision@5**: Percentage of top 5 retrieved docs that are relevant
-- **NDCG@5**: Normalized ranking quality of top 5 results
-- **LLM Judge**: Uses Groq's Llama-3.1-8b-instant for document relevance scoring
-
